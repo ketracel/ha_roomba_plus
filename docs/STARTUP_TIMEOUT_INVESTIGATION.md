@@ -30,9 +30,13 @@ question is:
 > connection, and can that false negative be removed without weakening actual
 > authentication or setup failures?
 
-The current evidence makes this a sound problem to investigate. It does not yet
-prove the exact time at which the field robot publishes `name`, so a controlled
-A/B experiment is still required before choosing a production design.
+The current evidence makes this a sound problem to investigate. However, the
+owner also reports that re-pairing through the official iRobot app has failed
+repeatedly for some time. That lowers confidence that the integration timeout
+is the robot's only problem, even though it remains a plausible explanation for
+Roomba+'s specific failure. The evidence does not yet prove the exact time at
+which the field robot publishes `name`, so a controlled A/B experiment is still
+required before choosing a production design.
 
 ---
 
@@ -74,6 +78,17 @@ omitted. No credential was printed or written to this repository.
    slot during setup, then releasing it on timeout; it is not consistent with
    an unreachable host or a firewall rejecting the connection.
 6. Disabling the entry returned it to `not_loaded`, and TCP 8883 remained open.
+7. The owner reports that recent attempts to pair the same robot with the
+   official iRobot app have also been unsuccessful. The exact failing stage and
+   app error have not yet been captured. This is evidence for a broader
+   provisioning, account-registration, or robot-side issue and prevents the
+   timeout from being treated as the complete explanation.
+8. At the time of investigation, the network controller showed the robot
+   associated and authorized on 2.4 GHz with -34 dBm signal, -95 dBm noise,
+   zero reported transmit drops, and 99% client satisfaction. The cumulative
+   transmit retry rate was 11.1%. This makes basic Wi-Fi reachability unlikely
+   to explain the official-app failure, but it cannot verify iRobot cloud or
+   account registration.
 
 These observations strongly support a late-readiness hypothesis. They do not,
 by themselves, prove that the password stored in the current Roomba+ entry is
@@ -130,7 +145,8 @@ and after the candidate timeout change.
 | Robot must be awake or cleaning | **Disfavored** | The same failure occurred while idle, actively cleaning, and after reboot. Upstream reports also include active-cleaning retries. |
 | LAN, routing, or firewall failure | **Eliminated for the observed session** | Direct TCP access works, the integration acquires the MQTT slot, and an independent local client returned state. |
 | Unsupported or custom firmware | **Disfavored** | The device runs stock firmware, Roomba+ lists the Roomba 980 as tested, and the same firmware appears in the upstream late-CONNACK report. |
-| Valid startup exceeds the readiness deadline | **Leading hypothesis** | Explains the independent-client success, exact timeout transitions, code history, and same-model upstream trace. Exact local stage timings remain to be captured. |
+| Robot-side provisioning or cloud-registration fault | **Plausible and uncharacterized** | Repeated official-app pairing failures broaden the fault beyond Home Assistant. The robot is nevertheless stably associated to Wi-Fi and serves local MQTT, so the failing official-app stage must be captured before attributing it to LAN connectivity, cloud registration, stale account state, or the robot itself. |
+| Valid startup exceeds the readiness deadline | **Leading explanation for the Roomba+ symptom, not necessarily the whole device fault** | Explains the independent-client success, exact timeout transitions, code history, and same-model upstream trace. Exact local stage timings remain to be captured, and official-app pairing failure may represent an additional fault. |
 
 ---
 
@@ -144,6 +160,7 @@ and after the candidate timeout change.
 | D-004 | 2026-08-24 | Do not remove the `name`, initial-snapshot, or map waits in the proof-of-concept. | Entity and capability setup assumes initial state hydration. Changing that contract is more invasive and requires broader tests. |
 | D-005 | 2026-08-24 | Treat 45 s as an experimental ceiling, not the proposed production value. | A production value or staged-deadline design should follow measured distributions and explicit failure behavior. |
 | D-006 | 2026-08-24 | Do not open an upstream PR from the proof-of-concept alone. | The PR should add focused tests, stage-specific diagnostics, a bounded rationale, and documentation after the A/B result is known. |
+| D-007 | 2026-08-24 | Characterize the official-app pairing failure before attributing all behavior to Roomba+'s deadline. | A second independent provisioning path now reportedly fails. The timeout experiment remains valid for Roomba+, but it cannot establish overall robot health or explain an app/cloud failure. |
 
 ---
 
@@ -167,13 +184,16 @@ password, IP address, or raw state payloads:
 
 1. Retrieve one fresh credential during a single pairing window and retain it
    only in Home Assistant's config entry storage.
-2. On the unmodified 16 s implementation, capture a baseline failure and its
+2. Record the official app's exact failing step and user-visible error during
+   the same pairing window; do not factory-reset the robot solely for this
+   experiment.
+3. On the unmodified 16 s implementation, capture a baseline failure and its
    stage timings.
-3. Change only the outer deadline to 45 s and repeat with the same credential,
+4. Change only the outer deadline to 45 s and repeat with the same credential,
    robot state, network, and `continuous=True` setting.
-4. Run at least three setup attempts, including one after a robot reboot if it
+5. Run at least three setup attempts, including one after a robot reboot if it
    can be done without changing any other condition.
-5. Disable the entry after the test if the integration would otherwise retain
+6. Disable the entry after the test if the integration would otherwise retain
    the single local MQTT slot.
 
 ### Acceptance criteria for the proof-of-concept
@@ -222,3 +242,4 @@ shows which stage is slow.
 | 2026-08-24 | Reproduced the setup-retry/TCP-slot timing pattern against a stock Roomba 980. |
 | 2026-08-24 | Traced the 10 s → 16 s timeout history and found no timing-specific test or measurement rationale. |
 | 2026-08-24 | Recorded upstream same-model evidence, alternative hypotheses, decision points, and the controlled A/B protocol. |
+| 2026-08-24 | Added the owner's history of unsuccessful official-app pairing and a contemporaneous, privacy-scrubbed network-health observation; lowered confidence that the timeout is the robot's only fault. |
