@@ -3184,7 +3184,7 @@ async def async_connect_or_timeout(
     """Connect to the vacuum and wait for first state report."""
     try:
         name: str | None = None
-        async with asyncio.timeout(16):
+        async with asyncio.timeout(45):
             _LOGGER.debug("Connecting to Roomba")
             await hass.async_add_executor_job(roomba.connect)
             while not roomba.roomba_connected or name is None:
