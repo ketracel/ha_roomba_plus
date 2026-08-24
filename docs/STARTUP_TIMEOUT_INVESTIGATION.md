@@ -123,6 +123,17 @@ omitted. No credential was printed or written to this repository.
     weaken the false-timeout diagnosis, but it shows that 45 s is not yet a
     justified production ceiling and that five-second reconnect cadence may
     trigger additional robot-side delay or backoff.
+15. A robot-internal soft reset was then sent through the 900-series local MQTT
+    `reset` command while the robot was docked. The MQTT transport went down
+    approximately 31 s after the command and Roomba+ reported it connected
+    again approximately 12 s later. No fresh full-state publication reached
+    the vacuum entity during the following three minutes, separating transport
+    reconnection from state hydration.
+16. After the robot had settled, one controlled config-entry reload completed
+    in approximately 30 s and published a fresh full state (including a battery
+    change from the stale pre-reset 38% value to 86%). This is slower than the
+    earlier 19–26 s successful loads. The internal reset therefore refreshed
+    volatile robot state but did **not** improve MQTT identity/readiness time.
 
 These observations confirm that Roomba+ misclassifies a valid slow startup as a
 connection failure under the 16 s ceiling. They do not yet identify whether
@@ -182,6 +193,7 @@ connection.
 | Incorrect password in the current Roomba+ entry | **Eliminated** | The unchanged stored credential completed three MQTT setups when only the outer timeout changed. The DHCP validation bypass remains a separate design weakness but did not cause this field failure. |
 | Another client occupies the one MQTT slot | **Strongly disfavored** | Port 8883 is available outside setup, becomes occupied exactly during Roomba+ setup, and returns immediately after Roomba+ times out. No Core Roomba entry is loaded. A debug trace can make this conclusive. |
 | Robot must be awake or cleaning | **Disfavored** | The same failure occurred while idle, actively cleaning, and after reboot. Upstream reports also include active-cleaning retries. |
+| Stale volatile robot state/cache causes the slow readiness report | **Disfavored** | A local MQTT `reset` caused a real transport restart, followed by a controlled entry load of approximately 30 s—slower than the prior 19–26 s range. The reboot refreshed full state but did not improve identification latency. |
 | LAN, routing, or firewall failure | **Eliminated for the observed session** | Direct TCP access works, the integration acquires the MQTT slot, and an independent local client returned state. |
 | Unsupported or custom firmware | **Disfavored** | The device runs stock firmware, Roomba+ lists the Roomba 980 as tested, and the same firmware appears in the upstream late-CONNACK report. |
 | Robot-side provisioning, cloud-registration, or official lifecycle-support fault | **Plausible** | The app retains the product but reports C510 and a stale battery state. The robot is nevertheless stably associated to Wi-Fi and serves local MQTT. iRobot warns that 2015–2018 900-series units may no longer be supported, so LAN connectivity, cloud registration, stale account state, and service retirement must remain distinct hypotheses. |
@@ -203,6 +215,7 @@ connection.
 | D-008 | 2026-08-24 | Do not factory-reset or remove the robot from the iRobot account during diagnosis. | The robot currently retains working LAN association and local MQTT, while iRobot warns that some units of this age may no longer be supported. Destroying the working local state could make recovery impossible and is unnecessary for the timeout A/B test. |
 | D-009 | 2026-08-24 | Stop the official-app recovery path after the non-destructive SSID/cache test and proceed with the local-only timeout experiment. | The app retains a stale SSID despite the Android phone joining the robot's live SSID and restarting the app. Local MQTT remains healthy, so further app recovery is outside the Roomba+ compatibility experiment and risks the working local state. |
 | D-010 | 2026-08-24 | Accept the timeout hypothesis and leave the successful field POC loaded while production work remains separate. | Multiple clean loads succeeded beyond the old deadline with the same entry and credential, while one rapid-reconnect run also exceeded 45 s before automatic retry recovered. Reverting immediately would restore a known false failure; claiming 45 s as production-ready would overstate the evidence. |
+| D-011 | 2026-08-24 | Do not propose robot reset or cache clearing as the startup workaround. | A measured local MQTT soft reset restarted the transport and refreshed state, but the next controlled setup still took approximately 30 s. The result points back to transport/readiness timing rather than stale volatile state. |
 
 ---
 
