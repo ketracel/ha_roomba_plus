@@ -254,9 +254,10 @@ password, IP address, or raw state payloads:
 - **Passed:** no firmware, readiness predicate, connection mode, entity
   behavior, or cloud behavior changed between A and B.
 
-If the 45 s build fails with the same credential, the timeout hypothesis is
-falsified for this field case and the next step is protocol-level logging, not a
-still-larger timeout.
+The observed 45 s failure does not undo the successful A/B result; it shows that
+the chosen experimental ceiling and reconnect cadence are not yet a reliable
+production contract. The next step is stage-specific timing with realistic
+cooldown, not blindly selecting a still-larger timeout.
 
 ---
 
