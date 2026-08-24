@@ -78,17 +78,25 @@ omitted. No credential was printed or written to this repository.
    slot during setup, then releasing it on timeout; it is not consistent with
    an unreachable host or a firewall rejecting the connection.
 6. Disabling the entry returned it to `not_loaded`, and TCP 8883 remained open.
-7. The owner reports that recent attempts to pair the same robot with the
-   official iRobot app have also been unsuccessful. The exact failing stage and
-   app error have not yet been captured. This is evidence for a broader
-   provisioning, account-registration, or robot-side issue and prevents the
-   timeout from being treated as the complete explanation.
+7. The official iRobot app still recognizes the existing product but displays
+   it as offline with connectivity code C510: `Connection to Wi-Fi or cloud was
+   lost when its battery ran out.` The app shows a stale yellow battery state
+   while the physical robot is awake. This is evidence for a broader cloud
+   reachability, account-registration, lifecycle-support, or robot-side issue
+   and prevents the timeout from being treated as the complete explanation.
 8. At the time of investigation, the network controller showed the robot
    associated and authorized on 2.4 GHz with -34 dBm signal, -95 dBm noise,
    zero reported transmit drops, and 99% client satisfaction. The cumulative
    transmit retry rate was 11.1%. This makes basic Wi-Fi reachability unlikely
    to explain the official-app failure, but it cannot verify iRobot cloud or
    account registration.
+9. The app's product record displayed a cached SSID different from the SSID to
+   which the network controller showed the robot actually associated. Both
+   SSIDs map to the same unisolated LAN. On an Android phone, joining the
+   robot's live SSID, force-stopping the app, and reopening it left the cached
+   SSID unchanged and the Product Wi-Fi Details control disabled. This is
+   consistent with a stale product/cloud record that the app cannot repair
+   through its same-network gate.
 
 These observations strongly support a late-readiness hypothesis. They do not,
 by themselves, prove that the password stored in the current Roomba+ entry is
@@ -127,6 +135,11 @@ field result is relevant to the current development branch.
 - [`roombapy` issue #265](https://github.com/pschmitt/roombapy/issues/265)
   records broader discovery/connection fragility when packets are missed and
   asks for better logging and integration coverage.
+- [iRobot's current connectivity-error documentation](https://answers.irobot.com/knowledge/15431)
+  identifies C510 as a charging/Wi-Fi/internet/reboot path and explicitly warns
+  that 900-series robots manufactured from 2015 through 2018 may no longer be
+  supported. This makes loss of the official cloud path plausible even while
+  the local MQTT service remains usable.
 
 Together, the repository and upstream history provide a plausible mechanism,
 an exact-model precedent, and a field reproduction. The missing item is a
@@ -145,7 +158,7 @@ and after the candidate timeout change.
 | Robot must be awake or cleaning | **Disfavored** | The same failure occurred while idle, actively cleaning, and after reboot. Upstream reports also include active-cleaning retries. |
 | LAN, routing, or firewall failure | **Eliminated for the observed session** | Direct TCP access works, the integration acquires the MQTT slot, and an independent local client returned state. |
 | Unsupported or custom firmware | **Disfavored** | The device runs stock firmware, Roomba+ lists the Roomba 980 as tested, and the same firmware appears in the upstream late-CONNACK report. |
-| Robot-side provisioning or cloud-registration fault | **Plausible and uncharacterized** | Repeated official-app pairing failures broaden the fault beyond Home Assistant. The robot is nevertheless stably associated to Wi-Fi and serves local MQTT, so the failing official-app stage must be captured before attributing it to LAN connectivity, cloud registration, stale account state, or the robot itself. |
+| Robot-side provisioning, cloud-registration, or official lifecycle-support fault | **Plausible** | The app retains the product but reports C510 and a stale battery state. The robot is nevertheless stably associated to Wi-Fi and serves local MQTT. iRobot warns that 2015–2018 900-series units may no longer be supported, so LAN connectivity, cloud registration, stale account state, and service retirement must remain distinct hypotheses. |
 | Valid startup exceeds the readiness deadline | **Leading explanation for the Roomba+ symptom, not necessarily the whole device fault** | Explains the independent-client success, exact timeout transitions, code history, and same-model upstream trace. Exact local stage timings remain to be captured, and official-app pairing failure may represent an additional fault. |
 
 ---
@@ -161,6 +174,8 @@ and after the candidate timeout change.
 | D-005 | 2026-08-24 | Treat 45 s as an experimental ceiling, not the proposed production value. | A production value or staged-deadline design should follow measured distributions and explicit failure behavior. |
 | D-006 | 2026-08-24 | Do not open an upstream PR from the proof-of-concept alone. | The PR should add focused tests, stage-specific diagnostics, a bounded rationale, and documentation after the A/B result is known. |
 | D-007 | 2026-08-24 | Characterize the official-app pairing failure before attributing all behavior to Roomba+'s deadline. | A second independent provisioning path now reportedly fails. The timeout experiment remains valid for Roomba+, but it cannot establish overall robot health or explain an app/cloud failure. |
+| D-008 | 2026-08-24 | Do not factory-reset or remove the robot from the iRobot account during diagnosis. | The robot currently retains working LAN association and local MQTT, while iRobot warns that some units of this age may no longer be supported. Destroying the working local state could make recovery impossible and is unnecessary for the timeout A/B test. |
+| D-009 | 2026-08-24 | Stop the official-app recovery path after the non-destructive SSID/cache test and proceed with the local-only timeout experiment. | The app retains a stale SSID despite the Android phone joining the robot's live SSID and restarting the app. Local MQTT remains healthy, so further app recovery is outside the Roomba+ compatibility experiment and risks the working local state. |
 
 ---
 
@@ -243,3 +258,5 @@ shows which stage is slow.
 | 2026-08-24 | Traced the 10 s → 16 s timeout history and found no timing-specific test or measurement rationale. |
 | 2026-08-24 | Recorded upstream same-model evidence, alternative hypotheses, decision points, and the controlled A/B protocol. |
 | 2026-08-24 | Added the owner's history of unsuccessful official-app pairing and a contemporaneous, privacy-scrubbed network-health observation; lowered confidence that the timeout is the robot's only fault. |
+| 2026-08-24 | Captured the official app's C510 offline/stale-battery state, manufacturer lifecycle warning, and the decision to preserve the robot's still-working local configuration. |
+| 2026-08-24 | Confirmed the app's cached SSID differs from the live robot association and survives an Android force-stop/reopen on the live SSID; stopped before any reset or reprovisioning. |
